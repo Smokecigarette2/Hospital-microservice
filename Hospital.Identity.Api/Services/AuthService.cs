@@ -1,4 +1,5 @@
-﻿using System.IdentityModel.Tokens.Jwt;
+﻿using System.Collections.Concurrent;
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using Hospital.Identity.Api.Dtos;
@@ -11,8 +12,8 @@ public class AuthService
 {
     private readonly IConfiguration _configuration;
 
-    private readonly List<AppUser> _users = new();
-    private int _nextId = 1;
+    private readonly ConcurrentDictionary<string, AppUser> _users = new();
+    private int _nextId = 0;
 
     public AuthService(IConfiguration configuration)
     {
@@ -21,22 +22,20 @@ public class AuthService
 
     public AuthResponseDto Register(RegisterDto dto)
     {
-        if (_users.Any(u => u.Username == dto.Username))
-        {
-            throw new InvalidOperationException("Username already exists.");
-        }
-
         var role = dto.Role == "Admin" ? "Admin" : "User";
 
         var user = new AppUser
         {
-            Id = _nextId++,
+            Id = Interlocked.Increment(ref _nextId),
             Username = dto.Username,
             Password = dto.Password,
             Role = role
         };
 
-        _users.Add(user);
+        if (!_users.TryAdd(dto.Username, user))
+        {
+            throw new InvalidOperationException("Username already exists.");
+        }
 
         var token = GenerateToken(user);
 
@@ -50,11 +49,7 @@ public class AuthService
 
     public AuthResponseDto Login(LoginDto dto)
     {
-        var user = _users.FirstOrDefault(u =>
-            u.Username == dto.Username &&
-            u.Password == dto.Password);
-
-        if (user == null)
+        if (!_users.TryGetValue(dto.Username, out var user) || user.Password != dto.Password)
         {
             throw new InvalidOperationException("Invalid username or password.");
         }
