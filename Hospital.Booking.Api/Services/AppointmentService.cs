@@ -2,16 +2,20 @@
 using Hospital.Booking.Api.Dtos;
 using Hospital.Booking.Api.Models;
 using Microsoft.EntityFrameworkCore;
+using Hospital.Contracts.Events;
+using MassTransit;
 
 namespace Hospital.Booking.Api.Services;
 
 public class AppointmentService
 {
     private readonly BookingDbContext _context;
+    private readonly IPublishEndpoint _publishEndpoint;
 
-    public AppointmentService(BookingDbContext context)
+    public AppointmentService(BookingDbContext context, IPublishEndpoint publishEndpoint)
     {
         _context = context;
+        _publishEndpoint = publishEndpoint;
     }
 
     public async Task<List<AppointmentResponseDto>> GetAllAsync()
@@ -38,6 +42,15 @@ public class AppointmentService
 
         _context.Appointments.Add(appointment);
         await _context.SaveChangesAsync();
+
+
+        await _publishEndpoint.Publish(new AppointmentCreatedEvent
+        {
+            AppointmentId = appointment.Id,
+            DoctorId = appointment.DoctorId,
+            PatientName = appointment.PatientName,
+            AppointmentDate = appointment.AppointmentDate
+        });
 
         return ToResponseDto(appointment);
     }

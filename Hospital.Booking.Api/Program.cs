@@ -1,7 +1,7 @@
 using Hospital.Booking.Api.Data;
 using Hospital.Booking.Api.Services;
 using Microsoft.EntityFrameworkCore;
-
+using MassTransit;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
@@ -11,6 +11,21 @@ builder.Services.AddDbContext<BookingDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("BookingDb")));
 
 builder.Services.AddScoped<AppointmentService>();
+
+
+builder.Services.AddMassTransit(x =>
+{
+    x.UsingRabbitMq((context, cfg) =>
+    {
+        cfg.Host("localhost", "/", h =>
+        {
+            h.Username("guest");
+            h.Password("guest");
+        });
+    });
+});
+
+
 
 var app = builder.Build();
 

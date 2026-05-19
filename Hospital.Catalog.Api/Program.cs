@@ -2,7 +2,8 @@ using Hospital.Catalog.Api.Data;
 using Microsoft.EntityFrameworkCore;
 using Hospital.Catalog.Api.Services;
 
-
+using Hospital.Catalog.Api.Consumers;
+using MassTransit;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -23,6 +24,27 @@ builder.Services.AddStackExchangeRedisCache(options =>
 });
 
 builder.Services.AddScoped<DoctorService>();
+
+
+builder.Services.AddMassTransit(x =>
+{
+    x.AddConsumer<AppointmentCreatedConsumer>();
+
+    x.UsingRabbitMq((context, cfg) =>
+    {
+        cfg.Host("localhost", "/", h =>
+        {
+            h.Username("guest");
+            h.Password("guest");
+        });
+
+        cfg.ReceiveEndpoint("appointment-created-catalog", e =>
+        {
+            e.ConfigureConsumer<AppointmentCreatedConsumer>(context);
+        });
+    });
+});
+
 
 
 var app = builder.Build();
