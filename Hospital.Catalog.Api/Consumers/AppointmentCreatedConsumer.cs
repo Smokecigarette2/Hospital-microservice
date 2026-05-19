@@ -1,31 +1,20 @@
-﻿using Hospital.Catalog.Api.Data;
+using Hospital.Catalog.Api.Services;
 using Hospital.Contracts.Events;
 using MassTransit;
-using Microsoft.EntityFrameworkCore;
 
 namespace Hospital.Catalog.Api.Consumers;
 
 public class AppointmentCreatedConsumer : IConsumer<AppointmentCreatedEvent>
 {
-    private readonly CatalogDbContext _context;
+    private readonly DoctorService _doctorService;
 
-    public AppointmentCreatedConsumer(CatalogDbContext context)
+    public AppointmentCreatedConsumer(DoctorService doctorService)
     {
-        _context = context;
+        _doctorService = doctorService;
     }
 
     public async Task Consume(ConsumeContext<AppointmentCreatedEvent> context)
     {
-        var doctor = await _context.Doctors
-            .FirstOrDefaultAsync(d => d.Id == context.Message.DoctorId);
-
-        if (doctor == null)
-        {
-            return;
-        }
-
-        doctor.IsAvailable = false;
-
-        await _context.SaveChangesAsync();
+        await _doctorService.SetAvailabilityAsync(context.Message.DoctorId, isAvailable: false);
     }
 }

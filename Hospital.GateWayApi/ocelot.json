@@ -71,6 +71,18 @@
       ],
       "UpstreamPathTemplate": "/api/Auth/login",
       "UpstreamHttpMethod": [ "POST" ]
+    },
+    {
+      "DownstreamPathTemplate": "/api/Auth/{everything}",
+      "DownstreamScheme": "https",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "localhost",
+          "Port": 7081
+        }
+      ],
+      "UpstreamPathTemplate": "/api/Auth/{everything}",
+      "UpstreamHttpMethod": [ "GET", "POST" ]
     }
   ],
   "GlobalConfiguration": {

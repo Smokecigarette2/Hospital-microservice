@@ -1,14 +1,44 @@
+using System.Reflection;
 using System.Text;
+using Hospital.Identity.Api.Infrastructure;
+using Hospital.Identity.Api.Security;
 using Hospital.Identity.Api.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
-builder.Services.AddOpenApi();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "Hospital Identity API",
+        Version = "v1",
+        Description = "Issues JWT tokens and manages users for role-based access control."
+    });
 
-builder.Services.AddSingleton<AuthService>();
+    var xmlFile = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
+    var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
+    options.IncludeXmlComments(xmlPath, includeControllerXmlComments: true);
+
+    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        In = ParameterLocation.Header,
+        Description = "Enter a JWT access token from this Identity API."
+    });
+});
+
+builder.Services.AddSingleton<IUserStore, InMemoryUserStore>();
+builder.Services.AddScoped<AuthService>();
+
+builder.Services.AddHealthChecks();
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -32,15 +62,19 @@ builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
-if (app.Environment.IsDevelopment())
+using (var scope = app.Services.CreateScope())
 {
-    app.MapOpenApi();
-
-    app.UseSwaggerUI(options =>
-    {
-        options.SwaggerEndpoint("/openapi/v1.json", "Hospital Identity API v1");
-    });
+    var authService = scope.ServiceProvider.GetRequiredService<AuthService>();
+    authService.EnsureDefaultAdmin();
 }
+
+app.UseMiddleware<SwaggerAdminAuthMiddleware>();
+
+app.UseSwagger();
+app.UseSwaggerUI(options =>
+{
+    options.SwaggerEndpoint("/swagger/v1/swagger.json", "Hospital Identity API v1");
+});
 
 app.UseHttpsRedirection();
 
@@ -48,5 +82,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
+app.MapHealthChecks("/health");
 
 app.Run();

@@ -1,0 +1,142 @@
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: hospital-sqlserver
+    environment:
+      ACCEPT_EULA: "Y"
+      SA_PASSWORD: "StrongPassword123!"
+    ports:
+      - "1433:1433"
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 1 bash -c '</dev/tcp/localhost/1433' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:latest
+    container_name: hospital-redis-compose
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: hospital-rabbitmq-compose
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  catalog-api:
+    build:
+      context: .
+      dockerfile: Hospital.Catalog.Api/Dockerfile
+    container_name: hospital-catalog-api
+    ports:
+      - "7260:8080"
+    environment:
+      ASPNETCORE_URLS: "http://+:8080"
+      ASPNETCORE_ENVIRONMENT: "Development"
+      ConnectionStrings__CatalogDb: "Server=sqlserver;Database=HospitalCatalogDb;User Id=sa;Password=StrongPassword123!;TrustServerCertificate=True"
+      ConnectionStrings__Redis: "redis:6379"
+      Jwt__Key: "THIS_IS_A_DEMO_SECRET_KEY_FOR_HOSPITAL_PROJECT_12345"
+      Jwt__Issuer: "Hospital.Identity.Api"
+      Jwt__Audience: "Hospital.Client"
+      SwaggerAuth__Username: "admin"
+      SwaggerAuth__Password: "Admin123!"
+      RabbitMq__Host: "rabbitmq"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  booking-api:
+    build:
+      context: .
+      dockerfile: Hospital.Booking.Api/Dockerfile
+    container_name: hospital-booking-api
+    ports:
+      - "7050:8080"
+    environment:
+      ASPNETCORE_URLS: "http://+:8080"
+      ASPNETCORE_ENVIRONMENT: "Development"
+      ConnectionStrings__BookingDb: "Server=sqlserver;Database=HospitalBookingDb;User Id=sa;Password=StrongPassword123!;TrustServerCertificate=True"
+      Jwt__Key: "THIS_IS_A_DEMO_SECRET_KEY_FOR_HOSPITAL_PROJECT_12345"
+      Jwt__Issuer: "Hospital.Identity.Api"
+      Jwt__Audience: "Hospital.Client"
+      SwaggerAuth__Username: "admin"
+      SwaggerAuth__Password: "Admin123!"
+      RabbitMq__Host: "rabbitmq"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  identity-api:
+    build:
+      context: .
+      dockerfile: Hospital.Identity.Api/Dockerfile
+    container_name: hospital-identity-api
+    ports:
+      - "7081:8080"
+    environment:
+      ASPNETCORE_URLS: "http://+:8080"
+      ASPNETCORE_ENVIRONMENT: "Development"
+      Jwt__Key: "THIS_IS_A_DEMO_SECRET_KEY_FOR_HOSPITAL_PROJECT_12345"
+      Jwt__Issuer: "Hospital.Identity.Api"
+      Jwt__Audience: "Hospital.Client"
+      DefaultAdmin__Username: "admin"
+      DefaultAdmin__Password: "Admin123!"
+      SwaggerAuth__Username: "admin"
+      SwaggerAuth__Password: "Admin123!"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  gateway-api:
+    build:
+      context: .
+      dockerfile: Hospital.GateWayApi/Dockerfile
+    container_name: hospital-gateway-api
+    ports:
+      - "7133:8080"
+    environment:
+      ASPNETCORE_URLS: "http://+:8080"
+      ASPNETCORE_ENVIRONMENT: "Docker"
+    depends_on:
+      catalog-api:
+        condition: service_healthy
+      booking-api:
+        condition: service_healthy
+      identity-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5

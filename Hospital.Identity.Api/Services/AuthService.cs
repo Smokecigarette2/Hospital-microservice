@@ -1,8 +1,9 @@
-﻿using System.Collections.Concurrent;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
 using Hospital.Identity.Api.Dtos;
+using Hospital.Identity.Api.Infrastructure;
 using Hospital.Identity.Api.Models;
 using Microsoft.IdentityModel.Tokens;
 
@@ -10,57 +11,90 @@ namespace Hospital.Identity.Api.Services;
 
 public class AuthService
 {
+    public const string AdminRole = "Admin";
+    public const string UserRole = "User";
+
     private readonly IConfiguration _configuration;
+    private readonly IUserStore _users;
 
-    private readonly ConcurrentDictionary<string, AppUser> _users = new();
-    private int _nextId = 0;
-
-    public AuthService(IConfiguration configuration)
+    public AuthService(IConfiguration configuration, IUserStore users)
     {
         _configuration = configuration;
+        _users = users;
     }
 
     public AuthResponseDto Register(RegisterDto dto)
     {
-        var role = dto.Role == "Admin" ? "Admin" : "User";
+        return CreateAccount(dto.Username, dto.Password, UserRole);
+    }
 
-        var user = new AppUser
-        {
-            Id = Interlocked.Increment(ref _nextId),
-            Username = dto.Username,
-            Password = dto.Password,
-            Role = role
-        };
-
-        if (!_users.TryAdd(dto.Username, user))
-        {
-            throw new InvalidOperationException("Username already exists.");
-        }
-
-        var token = GenerateToken(user);
-
-        return new AuthResponseDto
-        {
-            Username = user.Username,
-            Role = user.Role,
-            Token = token
-        };
+    public AuthResponseDto RegisterAdmin(RegisterDto dto)
+    {
+        return CreateAccount(dto.Username, dto.Password, AdminRole);
     }
 
     public AuthResponseDto Login(LoginDto dto)
     {
-        if (!_users.TryGetValue(dto.Username, out var user) || user.Password != dto.Password)
+        var username = NormalizeUsername(dto.Username);
+
+        if (!_users.TryGetByUsername(username, out var user)
+            || user.PasswordHash != HashPassword(username, dto.Password))
         {
             throw new InvalidOperationException("Invalid username or password.");
         }
 
-        var token = GenerateToken(user);
+        return CreateResponse(user);
+    }
 
+    public void EnsureDefaultAdmin()
+    {
+        var username = NormalizeUsername(_configuration["DefaultAdmin:Username"] ?? "admin");
+        var password = _configuration["DefaultAdmin:Password"] ?? "Admin123!";
+
+        if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
+        {
+            throw new InvalidOperationException("Default admin username and password must be configured.");
+        }
+
+        if (_users.TryGetByUsername(username, out _))
+        {
+            return;
+        }
+
+        _users.TryCreate(username, HashPassword(username, password), AdminRole, out _);
+    }
+
+    private AuthResponseDto CreateAccount(string rawUsername, string password, string role)
+    {
+        var username = NormalizeUsername(rawUsername);
+
+        if (string.IsNullOrWhiteSpace(username))
+        {
+            throw new InvalidOperationException("Username is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(password))
+        {
+            throw new InvalidOperationException("Password is required.");
+        }
+
+        var passwordHash = HashPassword(username, password);
+
+        if (!_users.TryCreate(username, passwordHash, role, out var user))
+        {
+            throw new InvalidOperationException("Username already exists.");
+        }
+
+        return CreateResponse(user);
+    }
+
+    private AuthResponseDto CreateResponse(AppUser user)
+    {
         return new AuthResponseDto
         {
             Username = user.Username,
             Role = user.Role,
-            Token = token
+            Token = GenerateToken(user)
         };
     }
 
@@ -75,9 +109,9 @@ public class AuthService
 
         var claims = new List<Claim>
         {
-            new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-            new Claim(ClaimTypes.Name, user.Username),
-            new Claim(ClaimTypes.Role, user.Role)
+            new(ClaimTypes.NameIdentifier, user.Id.ToString()),
+            new(ClaimTypes.Name, user.Username),
+            new(ClaimTypes.Role, user.Role)
         };
 
         var token = new JwtSecurityToken(
@@ -88,5 +122,16 @@ public class AuthService
             signingCredentials: credentials);
 
         return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+
+    private static string HashPassword(string username, string password)
+    {
+        var bytes = Encoding.UTF8.GetBytes($"{NormalizeUsername(username)}:{password}");
+        return Convert.ToHexString(SHA256.HashData(bytes));
+    }
+
+    private static string NormalizeUsername(string username)
+    {
+        return username.Trim();
     }
 }

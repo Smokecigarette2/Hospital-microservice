@@ -1,6 +1,9 @@
 <Solution>
   <Project Path="Hospital.Booking.Api/Hospital.Booking.Api.csproj" />
+  <Project Path="Hospital.Booking.Tests/Hospital.Booking.Tests.csproj" />
   <Project Path="Hospital.Catalog.Api/Hospital.Catalog.Api.csproj" />
+  <Project Path="Hospital.Catalog.Tests/Hospital.Catalog.Tests.csproj" />
   <Project Path="Hospital.GateWayApi/Hospital.GateWayApi.csproj" />
   <Project Path="Hospital.Identity.Api/Hospital.Identity.Api.csproj" />
+  <Project Path="Hospital.Identity.Tests/Hospital.Identity.Tests.csproj" />
 </Solution>

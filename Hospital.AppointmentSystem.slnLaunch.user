@@ -1,0 +1,23 @@
+[
+  {
+    "Name": "New Profile",
+    "Projects": [
+      {
+        "Path": "Hospital.Identity.Api\\Hospital.Identity.Api.csproj",
+        "Action": "Start"
+      },
+      {
+        "Path": "Hospital.Catalog.Api\\Hospital.Catalog.Api.csproj",
+        "Action": "Start"
+      },
+      {
+        "Path": "Hospital.Booking.Api\\Hospital.Booking.Api.csproj",
+        "Action": "Start"
+      },
+      {
+        "Path": "Hospital.GateWayApi\\Hospital.GateWayApi.csproj",
+        "Action": "Start"
+      }
+    ]
+  }
+]

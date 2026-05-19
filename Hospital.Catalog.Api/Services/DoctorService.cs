@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using Hospital.Catalog.Api.Data;
 using Hospital.Catalog.Api.Dtos;
 using Hospital.Catalog.Api.Models;
@@ -9,10 +9,10 @@ namespace Hospital.Catalog.Api.Services;
 
 public class DoctorService
 {
+    private const string DoctorsCacheKey = "catalog:doctors:all";
+
     private readonly CatalogDbContext _context;
     private readonly IDistributedCache _cache;
-
-    private const string DoctorsCacheKey = "catalog:doctors:all";
 
     public DoctorService(CatalogDbContext context, IDistributedCache cache)
     {
@@ -30,6 +30,8 @@ public class DoctorService
         }
 
         var doctors = await _context.Doctors
+            .AsNoTracking()
+            .OrderBy(doctor => doctor.FullName)
             .Select(doctor => ToResponseDto(doctor))
             .ToListAsync();
 
@@ -48,29 +50,29 @@ public class DoctorService
 
     public async Task<DoctorResponseDto?> GetByIdAsync(int id)
     {
-        var doctor = await _context.Doctors.FindAsync(id);
+        var doctor = await _context.Doctors
+            .AsNoTracking()
+            .FirstOrDefaultAsync(item => item.Id == id);
 
-        if (doctor == null)
-        {
-            return null;
-        }
-
-        return ToResponseDto(doctor);
+        return doctor is null ? null : ToResponseDto(doctor);
     }
 
     public async Task<DoctorResponseDto> CreateAsync(CreateDoctorDto dto)
     {
+        EnsureText(dto.FullName, "Doctor full name is required.");
+        EnsureText(dto.Specialization, "Doctor specialization is required.");
+        EnsureText(dto.Department, "Doctor department is required.");
+
         var doctor = new Doctor
         {
-            FullName = dto.FullName,
-            Specialization = dto.Specialization,
-            Department = dto.Department,
+            FullName = dto.FullName.Trim(),
+            Specialization = dto.Specialization.Trim(),
+            Department = dto.Department.Trim(),
             IsAvailable = true
         };
 
         _context.Doctors.Add(doctor);
         await _context.SaveChangesAsync();
-
         await ClearDoctorsCacheAsync();
 
         return ToResponseDto(doctor);
@@ -78,20 +80,40 @@ public class DoctorService
 
     public async Task<bool> UpdateAsync(int id, UpdateDoctorDto dto)
     {
+        EnsureText(dto.FullName, "Doctor full name is required.");
+        EnsureText(dto.Specialization, "Doctor specialization is required.");
+        EnsureText(dto.Department, "Doctor department is required.");
+
         var doctor = await _context.Doctors.FindAsync(id);
 
-        if (doctor == null)
+        if (doctor is null)
         {
             return false;
         }
 
-        doctor.FullName = dto.FullName;
-        doctor.Specialization = dto.Specialization;
-        doctor.Department = dto.Department;
+        doctor.FullName = dto.FullName.Trim();
+        doctor.Specialization = dto.Specialization.Trim();
+        doctor.Department = dto.Department.Trim();
         doctor.IsAvailable = dto.IsAvailable;
 
         await _context.SaveChangesAsync();
+        await ClearDoctorsCacheAsync();
 
+        return true;
+    }
+
+    public async Task<bool> SetAvailabilityAsync(int id, bool isAvailable)
+    {
+        var doctor = await _context.Doctors.FindAsync(id);
+
+        if (doctor is null)
+        {
+            return false;
+        }
+
+        doctor.IsAvailable = isAvailable;
+
+        await _context.SaveChangesAsync();
         await ClearDoctorsCacheAsync();
 
         return true;
@@ -101,32 +123,69 @@ public class DoctorService
     {
         var doctor = await _context.Doctors.FindAsync(id);
 
-        if (doctor == null)
+        if (doctor is null)
         {
             return false;
         }
 
         _context.Doctors.Remove(doctor);
         await _context.SaveChangesAsync();
-
         await ClearDoctorsCacheAsync();
 
         return true;
     }
 
-    public async Task<List<DoctorResponseDto>> FilterAsync(string? specialization, bool? available)
+    public async Task<List<DoctorResponseDto>> FilterAsync(
+        string? specialization,
+        string? department,
+        bool? available,
+        string? search,
+        string? sortBy,
+        bool descending)
     {
-        var query = _context.Doctors.AsQueryable();
+        var query = _context.Doctors.AsNoTracking();
 
         if (!string.IsNullOrWhiteSpace(specialization))
         {
-            query = query.Where(d => d.Specialization.ToLower() == specialization.ToLower());
+            var normalizedSpecialization = specialization.Trim().ToLower();
+            query = query.Where(doctor => doctor.Specialization.ToLower().Contains(normalizedSpecialization));
+        }
+
+        if (!string.IsNullOrWhiteSpace(department))
+        {
+            var normalizedDepartment = department.Trim().ToLower();
+            query = query.Where(doctor => doctor.Department.ToLower().Contains(normalizedDepartment));
         }
 
         if (available.HasValue)
         {
-            query = query.Where(d => d.IsAvailable == available.Value);
+            query = query.Where(doctor => doctor.IsAvailable == available.Value);
         }
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var normalizedSearch = search.Trim().ToLower();
+            query = query.Where(doctor =>
+                doctor.FullName.ToLower().Contains(normalizedSearch)
+                || doctor.Specialization.ToLower().Contains(normalizedSearch)
+                || doctor.Department.ToLower().Contains(normalizedSearch));
+        }
+
+        query = (sortBy?.Trim().ToLower()) switch
+        {
+            "specialization" => descending
+                ? query.OrderByDescending(doctor => doctor.Specialization).ThenBy(doctor => doctor.FullName)
+                : query.OrderBy(doctor => doctor.Specialization).ThenBy(doctor => doctor.FullName),
+            "department" => descending
+                ? query.OrderByDescending(doctor => doctor.Department).ThenBy(doctor => doctor.FullName)
+                : query.OrderBy(doctor => doctor.Department).ThenBy(doctor => doctor.FullName),
+            "availability" => descending
+                ? query.OrderByDescending(doctor => doctor.IsAvailable).ThenBy(doctor => doctor.FullName)
+                : query.OrderBy(doctor => doctor.IsAvailable).ThenBy(doctor => doctor.FullName),
+            _ => descending
+                ? query.OrderByDescending(doctor => doctor.FullName)
+                : query.OrderBy(doctor => doctor.FullName)
+        };
 
         return await query
             .Select(doctor => ToResponseDto(doctor))
@@ -136,6 +195,14 @@ public class DoctorService
     private async Task ClearDoctorsCacheAsync()
     {
         await _cache.RemoveAsync(DoctorsCacheKey);
+    }
+
+    private static void EnsureText(string value, string message)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new InvalidOperationException(message);
+        }
     }
 
     private static DoctorResponseDto ToResponseDto(Doctor doctor)

@@ -1,0 +1,91 @@
+{
+  "Routes": [
+    {
+      "DownstreamPathTemplate": "/api/Doctors",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "catalog-api",
+          "Port": 8080
+        }
+      ],
+      "UpstreamPathTemplate": "/api/Doctors",
+      "UpstreamHttpMethod": [ "GET", "POST" ]
+    },
+    {
+      "DownstreamPathTemplate": "/api/Doctors/{everything}",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "catalog-api",
+          "Port": 8080
+        }
+      ],
+      "UpstreamPathTemplate": "/api/Doctors/{everything}",
+      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE" ]
+    },
+    {
+      "DownstreamPathTemplate": "/api/Appointments",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "booking-api",
+          "Port": 8080
+        }
+      ],
+      "UpstreamPathTemplate": "/api/Appointments",
+      "UpstreamHttpMethod": [ "GET", "POST" ]
+    },
+    {
+      "DownstreamPathTemplate": "/api/Appointments/{everything}",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "booking-api",
+          "Port": 8080
+        }
+      ],
+      "UpstreamPathTemplate": "/api/Appointments/{everything}",
+      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE" ]
+    },
+    {
+      "DownstreamPathTemplate": "/api/Auth/register",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "identity-api",
+          "Port": 8080
+        }
+      ],
+      "UpstreamPathTemplate": "/api/Auth/register",
+      "UpstreamHttpMethod": [ "POST" ]
+    },
+    {
+      "DownstreamPathTemplate": "/api/Auth/login",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "identity-api",
+          "Port": 8080
+        }
+      ],
+      "UpstreamPathTemplate": "/api/Auth/login",
+      "UpstreamHttpMethod": [ "POST" ]
+    },
+    {
+      "DownstreamPathTemplate": "/api/Auth/{everything}",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "identity-api",
+          "Port": 8080
+        }
+      ],
+      "UpstreamPathTemplate": "/api/Auth/{everything}",
+      "UpstreamHttpMethod": [ "GET", "POST" ]
+    }
+  ],
+  "GlobalConfiguration": {
+    "BaseUrl": "http://localhost:7133"
+  }
+}
